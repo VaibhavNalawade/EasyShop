@@ -1,4 +1,4 @@
-package com.vaibhav.EasyShop
+package com.vaibhav.easyshop
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
