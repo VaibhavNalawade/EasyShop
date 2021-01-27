@@ -17,11 +17,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-typealias LumaListener = (luma: Double, barcode: List<com.google.mlkit.vision.barcode.Barcode>) -> Unit
+typealias BarcodeListener = (barcode: List<com.google.mlkit.vision.barcode.Barcode>) -> Unit
 
 
 class BarcodeScanActivity : AppCompatActivity() {
@@ -41,7 +40,8 @@ class BarcodeScanActivity : AppCompatActivity() {
             startCamera()
         } else {
             ActivityCompat.requestPermissions(
-                    this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+                this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
+            )
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -49,15 +49,18 @@ class BarcodeScanActivity : AppCompatActivity() {
     }
 
     override fun onRequestPermissionsResult(
-            requestCode: Int, permissions: Array<String>, grantResults:
-            IntArray) {
+        requestCode: Int, permissions: Array<String>, grantResults:
+        IntArray
+    ) {
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
                 startCamera()
             } else {
-                Toast.makeText(this,
-                        "Permissions not granted by the user.",
-                        Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "Permissions not granted by the user.",
+                    Toast.LENGTH_SHORT
+                ).show()
                 finish()
             }
         }
@@ -65,33 +68,32 @@ class BarcodeScanActivity : AppCompatActivity() {
 
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(
-                baseContext, it) == PackageManager.PERMISSION_GRANTED
+            baseContext, it
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener(Runnable {
+        cameraProviderFuture.addListener({
             // Used to bind the lifecycle of cameras to the lifecycle owner
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
             // Preview
             val preview = Preview.Builder()
-                    .build()
-                    .also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
+                .build()
+                .also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
             val imageAnalyzer = ImageAnalysis.Builder()
-                    .build()
-                    .also {
-                        it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { d: Double, barcode: List<com.google.mlkit.vision.barcode.Barcode> ->
-                            Log.d(TAG, "Average luminosity: $d")
-
+                .build()
+                .also {
+                    it.setAnalyzer(
+                        cameraExecutor,
+                        LuminosityAnalyzer { barcode: List<com.google.mlkit.vision.barcode.Barcode> ->
                             for (b in barcode)
                                 Log.d("BAR", b.rawValue!!)
-
-
                         })
-                    }
+                }
 
             // Select back camera as a default
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -102,7 +104,8 @@ class BarcodeScanActivity : AppCompatActivity() {
 
                 // Bind use cases to camera
                 cameraProvider.bindToLifecycle(
-                        this, cameraSelector, preview, imageAnalyzer)
+                    this, cameraSelector, preview, imageAnalyzer
+                )
 
             } catch (exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
@@ -126,35 +129,20 @@ class BarcodeScanActivity : AppCompatActivity() {
 
 private const val TAG = "BarCodeAnalyzer"
 
-private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnalysis.Analyzer {
-
-
-    private fun ByteBuffer.toByteArray(): ByteArray {
-        rewind()    // Rewind the buffer to zero
-        val data = ByteArray(remaining())
-        get(data)   // Copy the buffer into a byte array
-        return data // Return the byte array
-    }
+private class LuminosityAnalyzer(private val listener: BarcodeListener) : ImageAnalysis.Analyzer {
 
     @SuppressLint("UnsafeExperimentalUsageError")
-    override fun analyze(image: ImageProxy) {
-
-        val buffer = image.planes[0].buffer
-        val data = buffer.toByteArray()
-        val pixels = data.map { it.toInt() and 0xFF }
-        val luma = pixels.average()
-
-
-        val mediaImage = image.image
-        if (mediaImage != null) {
-            val inputImage = InputImage.fromMediaImage(mediaImage, image.imageInfo.rotationDegrees)
+    override fun analyze(imageProxy: ImageProxy) {
+        if (imageProxy.image != null) {
+            val inputImage =
+                InputImage.fromMediaImage(imageProxy.image!!, imageProxy.imageInfo.rotationDegrees)
             val scanner = BarcodeScanning.getClient()
-            scanner.process(inputImage).addOnSuccessListener { barcodes ->
-                listener(luma, barcodes)
+            scanner.process(inputImage).addOnSuccessListener { barcode ->
+                listener(barcode)
             }.addOnFailureListener {
                 Log.e(TAG, it.printStackTrace().toString())
             }.addOnCompleteListener {
-                image.close()
+                imageProxy.close()
             }
         }
     }
